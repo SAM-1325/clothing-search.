@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>衣物資料庫｜商品查詢與管理</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root{--ink:#26313b;--muted:#718096;--accent:#9d654d;--bg:#f7f6f4;--border:#e8e4df}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;color:var(--ink)}
+header{padding:44px 20px 38px;background:#eee4dc;text-align:center}header .eyebrow{font-size:11px;letter-spacing:.28em;font-weight:700;color:#92614d}h1{font-family:Georgia,"Noto Serif TC",serif;font-size:clamp(30px,6vw,47px);font-weight:600;letter-spacing:.06em;margin:10px 0}header p{color:#786f69;margin:0;font-size:14px}
+main{max-width:1210px;padding:24px 18px 64px;margin:auto}.status{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:18px;color:#685e55;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.status.error{border-color:#e5aaa0;color:#ac3d39}.status button,.action{background:#4e504a;color:#fff;border:0;border-radius:7px;padding:10px 16px;font-size:13px;cursor:pointer}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{background:#fff;border:1px solid var(--border);padding:22px;border-radius:12px}.metric small{display:block;color:#877e78;margin-bottom:12px}.metric strong{font-size:24px;font-variant-numeric:tabular-nums}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:16px 0 34px}.chart{background:white;border:1px solid var(--border);border-radius:12px;padding:22px;min-height:260px}.chart h2{font-size:16px;font-weight:700;margin:0 0 12px}.canvas-wrap{position:relative;height:235px}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:26px 0 15px;flex-wrap:wrap}.section-heading h2{margin:0;font-size:23px}.section-heading p{font-size:13px;color:var(--muted);margin:5px 0 0}
+.controls{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}.controls input,.controls select{font:inherit;font-size:14px;padding:12px;border-radius:8px;border:1px solid #d8d2ca;background:#fff;outline-color:#a77b62;min-height:44px}.controls input{flex:2;min-width:170px}.controls select{flex:1;min-width:125px}
+.grid{display:grid;grid-template-columns:repeat(5, minmax(0,1fr));gap:16px}.item{min-width:0;border:1px solid var(--border);border-radius:12px;background:white;overflow:hidden}.image{aspect-ratio:4/4.8;background:#f1eae3;display:block;width:100%;object-fit:cover}.details{padding:12px 13px 16px}.tags{font-size:11px;color:#896f5c;display:flex;gap:5px;justify-content:space-between;white-space:nowrap}.details h3{font-size:14px;font-weight:600;margin:7px 0 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.price{color:#9d654d;font-weight:800;font-size:17px}.sub{font-size:12px;color:#89929a;margin-top:9px}.empty{padding:40px 0;text-align:center;color:#777}.foot{margin-top:35px;padding-top:20px;border-top:1px solid var(--border);font-size:12px;color:#93877d;line-height:1.8}
+@media(max-width:1000px){.grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:700px){header{padding:30px 14px}.metrics{grid-template-columns:repeat(2,1fr)}.metric{padding:15px}.metric strong{font-size:21px}.charts{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.details{padding:10px}.controls{gap:7px}.status{font-size:12px}.chart{padding:14px}}
+</style>
+</head><body>
+<header><div class="eyebrow">CLOTHING DATABASE · MYSQL / TIDB CLOUD</div><h1>衣物商品資料庫</h1><p>商品搜尋、分類瀏覽及銷售統計 · 60 件服飾圖片管理</p></header>
+<main>
+<div class="status" id="status"><span id="statusText">正在讀取 TiDB Cloud 資料…</span><button id="reloadBtn" type="button">重新整理資料</button></div>
+<section class="metrics">
+<div class="metric"><small>商品總數</small><strong id="totalProducts">—</strong></div>
+<div class="metric"><small>服飾分類</small><strong id="totalCats">—</strong></div>
+<div class="metric"><small>庫存總量</small><strong id="totalStock">—</strong></div>
+<div class="metric"><small>已完成訂單營業額</small><strong id="totalSales">—</strong></div>
+</section>
+<section class="charts">
+<div class="chart"><h2>各類別商品數</h2><div class="canvas-wrap"><canvas id="catChart"></canvas></div></div>
+<div class="chart"><h2>各類別已完成訂單銷售件數</h2><div class="canvas-wrap"><canvas id="salesChart"></canvas></div></div>
+</section>
+<div class="section-heading"><div><h2>探索所有服飾</h2><p id="countText">正在載入商品…</p></div></div>
+<section class="controls" aria-label="商品搜尋篩選">
+<input id="search" type="search" placeholder="搜尋商品名稱、品牌或編號" aria-label="搜尋商品">
+<select id="category"><option value="">全部類別</option></select>
+<select id="sort"><option value="id">依商品編號</option><option value="low">價格：低到高</option><option value="high">價格：高到低</option><option value="stock">庫存：多到少</option></select>
+</section>
+<div id="productGrid" class="grid"></div>
+<footer class="foot">資料來源：TiDB Cloud 的 clothing_store 資料庫。透過 Render Flask API 即時讀取；更新資料庫後重新整理網頁即可同步。照片以商品資料表的 image_url 欄位關聯，每件商品各自使用不同照片。教學示範網站，非真實購物商店。</footer>
+</main>
+<script src="config.js"></script>
+<script>
+'use strict';
+let allProducts = [], charts = [];
+const $ = id => document.getElementById(id);
+const number = v => Number(v || 0).toLocaleString('zh-TW');
+const escapeHTML = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function status(t, error=false){$('statusText').textContent=t;$('status').classList.toggle('error',error);}
+function renderProducts(){
+ let q=$('search').value.trim().toLocaleLowerCase();let cat=$('category').value;
+ let items=allProducts.filter(p=>(!cat||String(p.categoryId)===cat)&&(!q||[p.id,p.name,p.brand,p.category].some(v=>String(v).toLocaleLowerCase().includes(q))));
+ if($('sort').value==='low')items.sort((a,b)=>a.price-b.price);
+ if($('sort').value==='high')items.sort((a,b)=>b.price-a.price);
+ if($('sort').value==='stock')items.sort((a,b)=>b.stock-a.stock);
+ $('countText').textContent=`顯示 ${items.length} 件／共 ${allProducts.length} 件商品`;
+ const grid=$('productGrid');grid.replaceChildren();
+ if(items.length===0){grid.innerHTML='<p class="empty">沒有符合條件的商品。</p>';return;}
+ for (const p of items){
+  const card=document.createElement('article');card.className='item';
+  card.innerHTML=`<img class="image" alt="${escapeHTML(p.name)}" loading="lazy"><div class="details"><div class="tags"><span>${escapeHTML(p.category)}</span><span>${escapeHTML(p.brand)}</span></div><h3 title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</h3><div class="price">NT$ ${number(p.price)}</div><div class="sub">${escapeHTML(p.id)} · ${escapeHTML(p.color)} · ${escapeHTML(p.size)} · 庫存 ${number(p.stock)}</div></div>`;
+  card.querySelector('img').src=p.image_url || '';
+  card.querySelector('img').onerror=e=>{e.currentTarget.style.opacity='.2';e.currentTarget.alt='照片暫時無法載入';};
+  grid.appendChild(card);
+ }
+}
+function drawBar(id, labels, values, color){
+ const el=$(id);if(typeof Chart==='undefined'){el.parentElement.innerHTML='<p>圖表元件無法載入，但上方銷售資料仍正常。</p>';return;}
+ charts.push(new Chart(el,{type:'bar',data:{labels,datasets:[{data:values,backgroundColor:color,borderRadius:5,maxBarThickness:45}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}}}}));
+}
+async function load(){
+ status('正在讀取 TiDB Cloud 最新資料…');
+ const base=(window.API_BASE||'').replace(/\/$/,'');
+ if(!base || base.includes('REPLACE-WITH-YOUR-SERVICE')){status('網站尚未設定 Render API 網址，請在 GitHub 修改 config.js。',true);return;}
+ try{
+  const response=await fetch(base+'/api/dashboard?t='+Date.now(),{cache:'no-store'});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const data=await response.json();if(!Array.isArray(data.products))throw new Error('API 格式不正確');
+  allProducts=data.products;
+  $('totalProducts').textContent=number(data.summary.products);
+  $('totalCats').textContent=number(data.summary.categories);
+  $('totalStock').textContent=number(data.summary.stock);
+  $('totalSales').textContent='NT$ '+number(data.summary.salesAmount);
+  $('category').innerHTML='<option value="">全部類別</option>';
+  for(const cat of data.categories){const o=document.createElement('option');o.value=cat.id;o.textContent=cat.name;$('category').appendChild(o);}
+  charts.forEach(c=>c.destroy());charts=[];
+  drawBar('catChart',data.categories.map(c=>c.name),data.categories.map(c=>c.count),'#bd917d');
+  drawBar('salesChart',data.salesByCategory.map(c=>c.name),data.salesByCategory.map(c=>c.value),'#6d8e89');
+  renderProducts();
+  status('已成功連接 TiDB Cloud · 最新更新：'+new Date().toLocaleString('zh-TW'));
+ }catch(e){console.error(e);status('資料讀取失敗：'+e.message+'，請檢查 Render 與 TiDB Cloud。',true);}
+}
+['search','category','sort'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',renderProducts));
+$('reloadBtn').addEventListener('click',load);
+load();
+</script></body></html>

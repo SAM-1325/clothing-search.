@@ -1,0 +1,5 @@
+flask>=3.0,<4
+flask-cors>=4.0,<7
+pymysql>=1.1,<2
+certifi>=2024.0
+gunicorn>=22,<26
